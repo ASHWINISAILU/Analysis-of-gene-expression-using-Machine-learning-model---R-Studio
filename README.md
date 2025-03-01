@@ -1,4 +1,4 @@
-Analysis of gene expression using Machine learning models - R Studio
+**Analysis of gene expression using Machine learning models - R Studio**
 
 **Abstract:**
 The main aim of this project is to analyze gene expression on invasive vs non-invasive using machine
@@ -142,13 +142,13 @@ In summary, the GBM model, when trained on gene expression data alongside supple
 
 
 **References:**
-•
+
 An Introduction to Statistical Learning with Applications in R- Gareth ,James Daniela Witten,Trevor Hastie ,Robert Tulshiram
-•
+
 https://www.datacamp.com/tutorial/pca-analysis-r
-•
+
 https://www.datacamp.com/tutorial/k-means-clustering-r
-•
+
 https://www.datacamp.com/tutorial/machine-learning-in-r
 
 
