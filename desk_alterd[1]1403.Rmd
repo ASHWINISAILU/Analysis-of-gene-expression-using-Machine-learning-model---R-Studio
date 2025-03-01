@@ -1,0 +1,716 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-03-11"
+---
+
+```{r}
+# Load necessary library
+library(stats)
+library(pls)
+library(caret)
+library(Rtsne)
+library(tidymodels)
+library(themis)
+library(tidyverse)
+library(ggplot2)
+library(MASS)
+library(gbm)
+library(class)
+library(randomForest)
+library(e1071)
+library(nnet)
+library(dplyr)
+library(dbscan)
+library(factoextra)
+
+```
+
+```{r}
+ # Read the CSV file 'gene-expression-invasive-vs-noninvasive-cancer.csv' into a dataframe 'InitialData'
+  InitialData <- read.csv(file="D:/R Lab/Group Project/Coursework Initial Task-20240304/gene-expression-invasive-vs-noninvasive-cancer.csv")
+  
+  # Set the seed for reproducibility
+  set.seed(2312181)
+  
+  # Generate 4948 random numbers, rank them, and select the first 2000 as indices for the gene subset
+  team_gene_subset <- rank(runif(1:4948))[1:2000]
+  
+  # Add an additional index (4949) to the selected gene subset
+  team_gene_subset <- c(team_gene_subset, 4949)
+  
+  # Subset the 'InitialData' dataframe using the selected gene indices
+  team_gene_subset <- InitialData[, team_gene_subset]
+```
+
+```{r}
+# Generate random gene expression data
+  set.seed(2312181)  # for reproducibility
+  gene_data <- matrix(rnorm(2000*50), ncol = 50)  # 2000 genes, 50 samples
+  
+  # Convert the matrix to a data frame
+  gene_data_df <- as.data.frame(gene_data)
+  
+  # Create a box plot for the gene expression data
+  boxplot(gene_data_df, main = "Gene Expression Data", xlab = "Samples", ylab = "ExpressionLevel")
+
+```
+```{r}
+library(dplyr)
+
+sum(is.na(team_gene_subset))
+
+# Define a function for median imputation
+impute_median <- function(x) {
+  median_value <- median(x, na.rm = TRUE)
+  replace(x, is.na(x), median_value)
+}
+
+# Apply median imputation to replace missing values
+team_gene_subset_imputed_median <- team_gene_subset %>%
+  mutate(across(everything(), impute_median))
+
+# Display the imputed data for median
+print(team_gene_subset_imputed_median)
+
+```
+```{r}
+
+
+```
+
+```{r}
+# Set the number of genes for plotting
+num_genes <- 10  # Adjust the number of genes to plot as desired
+
+# Select a subset of genes for plotting
+genes_subset <- team_gene_subset_imputed_median[, 1:num_genes]
+
+# Convert the data to long format for plotting
+genes_subset_long <- stack(genes_subset)
+
+# Plot the boxplot
+boxplot(values ~ ind, data = genes_subset_long, 
+        main = "Gene Expression Boxplot (After Median Imputation)",xlab = "Genes", ylab = "Expression Level")
+```
+
+```{r}
+
+#To show outliers before winsorizering
+boxplot(team_gene_subset_imputed_median, main="Dataset with outliers before winsorizer method used")
+```
+
+```{r}
+# to identify the no. of genes expressions in outliers
+# Load necessary libraries
+library(zoo)
+library(dplyr)
+
+# Sample data has been imputed with median imputation
+# Assuming 'team_gene_subset_imputedmedian' is your dataset after imputation
+
+# Function to detect outliers in a vector
+detect_outliers <- function(x) {
+  qnt <- quantile(x, probs=c(.25, .75), na.rm = TRUE)
+  iqr <- IQR(x, na.rm = TRUE)
+  outliers <- x < (qnt[1] - 1.5 * iqr) | x > (qnt[2] + 1.5 * iqr)
+  return(outliers)
+}
+
+# Apply the function to each column of the dataset
+outlier_columns <- lapply(team_gene_subset_imputedmedian, detect_outliers)
+
+# Identify columns with outliers
+cols_with_outliers <- sum(sapply(outlier_columns, any))
+cols_with_outliersnam <- names(which(sapply(outlier_columns, length) > 0))
+
+
+# Print the number of columns with outliers
+print(cols_with_outliers)
+print(cols_with_outliersnam)
+```
+
+
+```{r}
+# to reduce outliers
+library(DescTools)
+
+# Sample data has been imputed with median imputation
+# Assuming 'team_gene_subset_imputedmedian' is your dataset after imputation
+
+# Function to perform winsorization on a vector
+winsorize_column <- function(x, probs = c(0.05, 0.95), na.rm = FALSE) {
+  Winsorize(x, probs = probs, na.rm = na.rm, type = 7)
+}
+
+# Apply winsorization to each column of the dataset
+team_gene_subset_winsorized <- lapply(team_gene_subset_imputed_median, winsorize_column)
+
+# Convert the list back to a data frame
+team_gene_subset_winsorized <- as.data.frame(team_gene_subset_winsorized)
+
+# Print the dataset after winsorization
+print(team_gene_subset_winsorized)
+
+boxplot(team_gene_subset_winsorized,main = "Reduced outliers after implementing Winsorizer method")
+
+# to check how much outliers removed by winsorizer
+# Count outliers removed from each column
+outliers_removed <- sapply(1:length(team_gene_subset_imputed_median), function(i) {
+  sum(team_gene_subset_imputed_median[[i]] != team_gene_subset_winsorized[[i]])
+})
+
+# Print the number of outliers removed for each column
+print(outliers_removed)
+
+
+# Convert the list back to a data frame
+team_gene_subset_winsorized <- as.data.frame(team_gene_subset_winsorized)
+
+# Calculate the count of outliers removed
+outliers_before <- sum(team_gene_subset_imputed_median)  # Count outliers in the original dataset
+outliers_before
+outliers_after <- sum(team_gene_subset_winsorized)  # Count outliers in the winsorized dataset
+outliers_after
+outliers_removed <- outliers_before - outliers_after  # Calculate the difference
+
+# Print the count of outliers removed
+print(paste("Outliers removed by Winsorization:", outliers_removed))
+
+```
+
+```{r}
+# to identify the no. of genes expressions in outliers
+# Load necessary libraries
+library(zoo)
+library(dplyr)
+
+# Sample data has been imputed with median imputation
+# Assuming 'team_gene_subset_imputedmedian' is your dataset after imputation
+
+# Function to detect outliers in a vector
+detect_outliersaf <- function(x) {
+  qnt <- quantile(x, probs=c(.25, .75), na.rm = TRUE)
+  iqr <- IQR(x, na.rm = TRUE)
+  outliers <- x < (qnt[1] - 1.5 * iqr) | x > (qnt[2] + 1.5 * iqr)
+  return(outliers)
+}
+
+# Apply the function to each column of the dataset
+outlier_columnsaf <- lapply(team_gene_subset_winsorized, detect_outliersaf)
+
+# Identify columns with outliers
+cols_with_outliersaf <- sum(sapply(outlier_columnsaf, any))
+cols_with_outliersnamaf <- names(which(sapply(outlier_columnsaf, length) > 0))
+
+
+# Print the number of columns with outliers
+print(cols_with_outliersaf)
+print(cols_with_outliersnam)
+
+
+```
+
+```{r}
+# Extract column names of team_gene_subset except the first and last column
+gene_columns <- colnames(team_gene_subset_winsorized)[-c(1, ncol(team_gene_subset_winsorized))]
+
+# Define a function for performing t-tests
+per_t_test <- function(data, gene_column) {
+  # Check if there is sufficient variability in the data
+  if (length(unique(data[[gene_column]])) <= 1) {
+    # If there is no variability, return NA
+    return(NA)
+  } else {
+    # Perform a two-sample t-test comparing the gene expression levels between two classes/groups
+    t_res <- t.test(data[[gene_column]] ~ data$Class)
+    # Return the p-value obtained from the t-test
+    return(t_res$p.value)
+  }
+}
+
+# Perform t-test for each gene column in the dataset
+p_values <- sapply(gene_columns, per_t_test, data = team_gene_subset_winsorized)
+
+# Identify genes with p-values less than 0.05, indicating statistical significance
+signi_gene <- gene_columns[p_values < 0.05]
+
+# Combine the significant genes with the last column ('Class') to include the class labels
+signi_gene_with_lbl <- c(signi_gene, "Class") 
+
+# Extract the relevant columns from your original dataset
+signi_gene_data <- team_gene_subset_winsorized[, c(signi_gene_with_lbl)]
+
+# Convert class labels to a factor for classification
+signi_gene_data$Class <- as.factor(signi_gene_data$Class)
+
+# Create a matrix using the significant genes data
+signi_gene_matrix <- as.matrix(signi_gene_data[, -ncol(signi_gene_data)])
+
+
+```
+```{r}
+# Perform PCA
+pca_result <- prcomp(team_gene_subset_winsorized, scale. = TRUE)
+
+# Summary of PCA
+summary(pca_result)
+
+# Variance explained by each principal component
+print(pca_result$sdev^2 / sum(pca_result$sdev^2))
+
+# Extract principal components
+PC <- as.data.frame(pca_result$x)
+
+# Print the extracted principal components
+print(PC)
+
+
+
+```
+
+```{r}
+
+# Performing PCA using the dimensional reduced PC components
+
+
+# PCA using the PC components  excluding the first and last 
+pca_result1 <- prcomp(PC, center = TRUE, scale. = TRUE)
+
+summary(pca_result1)
+
+# Scree plot
+plot(1:length(pca_result1$sdev), pca_result1$sdev^2, type = "b", 
+     xlab = "Principal Component", ylab = "Variance Explained",
+     main = "Scree Plot for PCA")
+
+# Extract PC scores
+pc_scores <- as.data.frame(pca_result$x)
+
+# Visualize PCA using factoextra
+
+fviz_eig(pca_result1, addlables=TRUE)
+
+```
+```{r}
+# Check the class of dataset after removing outliers
+class(team_gene_subset_winsorized)
+
+# Check the structure of dataset after removing outliers
+str(team_gene_subset_winsorized)
+
+# Check for missing or non-numeric values in each element of team_gene_subset
+for (i in seq_along(team_gene_subset_winsorized)) {
+  if (is.numeric(team_gene_subset_winsorized[[i]]) && !is.data.frame(team_gene_subset_winsorized[[i]])) {
+    if (any(is.na(team_gene_subset_winsorized[[i]])) || any(is.infinite(team_gene_subset_winsorized[[i]]))) {
+      # Handle missing or infinite values (e.g., impute missing values or remove infinite values)
+      # For example, you can impute missing values using the mean:
+      team_gene_subset_winsorized[[i]][is.na(team_gene_subset_winsorized[[i]]) | is.infinite(team_gene_subset_winsorized[[i]])] <- mean(team_gene_subset_winsorized[[i]], na.rm = TRUE)
+    }
+  }
+}
+
+
+```
+```{r}
+# Define the silhouette_score function
+silhouette_score <- function(k, df) {
+  km <- kmeans(df, centers = k, nstart = 25)
+  ss <- silhouette(km$cluster, dist(df))
+  mean(ss[, 3])
+}
+
+library(ggplot2)
+
+# Define the range of k values
+k_values <- 2:10
+
+# Compute silhouette scores for each value of k
+sil_scores <- sapply(k_values, silhouette_score, df = PC)
+
+# Create a data frame for plotting
+sil_data <- data.frame(k = k_values, silhouette_score = sil_scores)
+
+# Plot silhouette scores
+ggplot(sil_data, aes(x = k, y = silhouette_score)) +
+  geom_line() +
+  geom_point() +
+  geom_vline(xintercept = 2, linetype = "dashed", color = "red") + 
+  labs(title = "Silhouette Score for Different Values of k",
+       x = "Number of Clusters (k)",
+       y = "Average Silhouette Score") +
+  theme_minimal()
+
+k = 2
+# Perform k-means clustering with k = 2
+kmeans_result <- kmeans(PC, centers = k, nstart = 25)
+kmeans_result
+
+# Visualize clustering results
+fviz_cluster(kmeans_result, data = PC, geom = 'point',
+             stand = FALSE, ellipse.type = "convex",
+             ggtheme = theme_minimal(),
+             main = paste('k-means Clustering (k =', k, ')'))
+wss <- sum(kmeans_result$withinss)
+print(paste("Within-cluster sum of squares (WSS):", wss))
+
+```
+```{r}
+
+```
+```{r}
+
+```
+
+```{r}
+# Compute distance matrix using Euclidean distance
+dist_mat <- dist(t(team_gene_subset_winsorized[, -ncol(team_gene_subset_winsorized)]))
+
+# Perform hierarchical clustering
+hc_result <- hclust(dist_mat, method = "complete")
+hc_result
+
+# Plot the dendrogram
+plot(hc_result, main = "Hierarchical Clustering Dendrogram", sub = "", xlab = "")
+
+
+
+```
+```{r}
+# Load necessary libraries
+
+```
+
+
+```{r}
+
+
+# Perform Principal Component Analysis (PCA) on the gene expression data, excluding the first and last columns
+pca_result2 <- prcomp(team_gene_subset_winsorized[, -ncol(team_gene_subset_winsorized)], center = TRUE, scale. = TRUE)
+
+# Extract the first two principal components
+PC1 <- pca_result2$x[, 1]
+PC2 <- pca_result2$x[, 2]
+
+# Combine the first two principal components with the Class column
+pca_data <- cbind(PC1, PC2, Class = team_gene_subset_winsorized$Class)
+
+
+# If pca_data is a data frame and contains a column named 'Class'
+# Proceed with creating tsne_data
+
+
+# Load necessary library
+library(Rtsne)
+
+# Re-run t-SNE with 2 dimensions and a lower perplexity value
+tsne_result_2_clusters <- Rtsne(as.matrix(pca_data[, -ncol(pca_data)]), dims = 2, perplexity = 10, verbose = TRUE)
+
+# Create a data frame with t-SNE results
+tsne_data_2_clusters <- data.frame(PC1 = tsne_result_2_clusters$Y[, 1],
+                                    PC2 = tsne_result_2_clusters$Y[, 2],
+                                    Class = pca_data[, 3])
+
+
+# Plot the t-SNE clusters with 2 clusters
+ggplot(data = tsne_data_2_clusters, aes(x = PC1, y = PC2, color = factor(Class))) +
+  geom_point() +
+  labs(title = "t-SNE Clustering with 2 Clusters",
+       x = "t-SNE Dimension 1",
+       y = "t-SNE Dimension 2",
+       color = "Class") +
+  theme_minimal()
+
+
+
+
+
+```
+```{r}
+
+
+```
+```{r}
+
+# Set seed for reproducibility
+set.seed(2312181)
+
+# Convert class labels to a factor for classification
+Y <- as.factor(signi_gene_data$Class)
+X <- signi_gene_matrix
+
+# Split the data into training and testing sets
+trainIndex <- createDataPartition(Y, p = .8, list = FALSE)
+X_train <- X[trainIndex, ]
+Y_train <- Y[trainIndex]
+X_test <- X[-trainIndex, ]
+Y_test <- Y[-trainIndex]
+
+# Cleaning factor levels of Y_train to ensure they are valid R variable names
+levels(Y_train) <- make.names(levels(Y_train))
+Y_train <- factor(Y_train)
+
+# Set up cross-validation control with class probabilities
+control <- trainControl(method = "cv", 
+                        number = 3, 
+                        summaryFunction = multiClassSummary, 
+                        savePredictions = TRUE)
+
+# Define the metric for evaluation
+metric <- "Accuracy"
+
+# Logistic Regression
+#model_log <- train(Y_train ~ ., data = data.frame(X_train, Y_train),
+#                   method = "glm", family = "binomial",
+#                   trControl = control)
+
+
+
+# Remove rows with missing values
+complete_cases <- complete.cases(X_train, Y_train)
+X_train <- X_train[complete_cases, ]
+Y_train <- Y_train[complete_cases]
+
+# Define the hyperparameter grid
+hyper_grid <- expand.grid(
+  alpha = seq(0,1,0.1),   # L1 regularization parameter
+  lambda = seq(0.001,0.1,length.out=10)  # L2 regularization parameter
+)
+
+# Hyper-tune the logistic regression model
+tuned_model_log <- train(
+  Y_train ~ ., 
+  data = data.frame(X_train, Y_train),
+  method = "glmnet",           # Use glmnet method for elastic net regularization
+  trControl = control,
+  tuneGrid = hyper_grid,       # Use the defined hyperparameter grid
+  metric = metric
+)
+tuned_model_log
+
+
+# Make predictions on the test data
+predictions_log <- predict(tuned_model_log, newdata = X_test)
+
+# Create a confusion matrix
+confusion_matrix_log <- table(predictions_log, Y_test)
+confusion_matrix_log
+
+# Calculate accuracy
+acc_log=sum(diag(confusion_matrix_log)) / sum(confusion_matrix_log)
+acc_log
+
+# The best parameters for logistic regression model are as follows:
+# Check the best parameters
+best_params_log <- tuned_model_log$bestTune
+print(best_params_log)
+# alpha is 0 means ridge regression is the best hyperparameter
+
+# LDA
+model_lda <- train(Y_train ~ ., data = data.frame(X_train, Y_train), method = "lda", trControl = control, 
+                   metric = metric,verbose = FALSE)
+model_lda
+
+#QDA
+#model_qda <- train(Y_train ~ ., data = data.frame(X_train, Y_train), method = "gbm", trControl = control, metric = metric)
+
+# GBM
+model_gbm <- train(Y_train ~ ., data = data.frame(X_train, Y_train), method = "gbm", trControl = control, metric = metric, tuneLength = 5,tuneLength = 5)
+model_gbm
+
+
+
+# KNN
+# Setting Hyper Parameters for tuning
+knn_hyperparameters=expand.grid(
+  k=c(1,2,3,4,5,6,7,8)
+)
+model_knn <- train(Y_train ~ ., data = data.frame(X_train, Y_train), method = "knn", trControl = control, metric = metric, tuneGrid=knn_hyperparameters)
+
+Y_pred_knn=predict(model_knn, as.matrix(X_test))
+cm_knn=table(Y_pred_knn,Y_test)
+knn_acc=sum(diag(cm_knn)) / sum(cm_knn)
+knn_acc
+best_params_knn <- model_knn$bestTune
+best_params_knn
+
+
+# Random Forest
+model_rf <- train(Y_train ~ ., data = data.frame(X_train, Y_train), method = "rf", trControl = control, metric = metric, tuneLength = 3,verbose = FALSE)
+model_rf
+
+# SVM
+# Setting Hyper Parameters for tuning
+svm_hyperparameters <- expand.grid(C = c(0.1, 1, 10)) 
+Y_train=factor(Y_train)
+model_svm <- train(Y_train ~ ., data = data.frame(X_train, Y_train), method = "svmLinear", trControl = control, metric = metric, tuneLength = 3,verbose = FALSE)
+
+Y_pred_svm = predict(model_svm, X_test)
+cm_svm = table(Y_pred_svm,Y_test)
+svm_acc=sum(diag(cm_svm)) / sum(cm_svm)
+svm_acc
+best_params_svm <- model_svm$bestTune
+best_params_svm
+
+
+# Create a list of model objects
+model_list <- list(LogReg = model_log, LDA = model_lda, GBM = model_gbm, KNN = model_knn, RandomForest = model_rf, SVM = model_svm)
+
+# Create the resamples object
+results <- resamples(model_list)
+
+# Analyze the results
+summary(results)
+
+
+
+
+
+
+```
+
+```{r}
+# Assign cluster labels to testing data using kmeans centroids
+cluster_labels_test <- predict(kmeans_result, newdata = X_test)
+
+# Include cluster labels in the testing data
+X_test_with_clusters <- cbind(X_test, Cluster = factor(cluster_labels_test))
+
+# Make predictions on the test set with the GBM model incorporating cluster labels
+predictions_with_clusters <- predict(model_gbm_with_clusters, newdata = X_test_with_clusters)
+
+# Calculate accuracy
+accuracy_with_clusters <- mean(predictions_with_clusters == Y_test)
+
+# Compare the accuracy before and after incorporating cluster labels
+accuracy_comparison <- data.frame(Method = c("GBM without clusters", "GBM with clusters"),
+                                  Accuracy = c(accuracy, accuracy_with_clusters))
+print(accuracy_comparison)
+
+
+# Compare the accuracy before and after incorporating cluster labels
+accuracy_comparison <- data.frame(Method = c("GBM without clusters", "GBM with clusters"),
+                                  Accuracy = c(accuracy, accuracy_with_clusters))
+print(accuracy_comparison)
+
+
+
+```
+
+```{r}
+
+```
+
+```{r}
+# Step 1: Assign Cluster Labels
+cluster_labels <- kmeans_result$cluster
+
+# Subsetting cluster_labels to match the dimensions of X_train and X_test
+cluster_labels_train <- cluster_labels[1:nrow(X_train)]
+cluster_labels_test <- cluster_labels[(nrow(X_train) + 1):length(cluster_labels)]
+
+# Step 2: Include Cluster Labels in the training data
+data_with_clusters <- cbind(data.frame(X_train, Y_train), Cluster = factor(cluster_labels_train))
+
+# Train GBM model with cluster labels
+model_gbm_with_clusters <- train(Y_train ~ . + Cluster, 
+                                 data = data_with_clusters, 
+                                 method = "gbm", 
+                                 trControl = control, 
+                                 metric = metric, 
+                                 tuneLength = 5)
+
+# Convert X_test_with_cluster to a data frame
+X_test_with_cluster <- as.data.frame(X_test_with_cluster)
+
+# Convert Cluster variable to factor
+X_test_with_cluster$Cluster <- factor(X_test_with_cluster$Cluster)
+
+# Verify the structure of X_test_with_cluster
+str(X_test_with_cluster)
+
+
+
+# Make predictions on the test set
+predictions <- predict(model_gbm_with_clusters, newdata = X_test_with_cluster)
+
+# Check factor levels of predictions and Y_test
+levels(predictions)
+levels(Y_test)
+
+# Align factor levels
+levels(predictions) <- levels(Y_test)
+
+# Calculate accuracy
+accuracy <- mean(predictions == Y_test)
+
+accuracy
+
+
+
+
+
+```
+
+```{r}
+# Assuming you have the required libraries loaded
+library(caret)
+
+# Assuming you have your data loaded and prepared with appropriate variable names
+# Replace df, X_train, Y_train, X_test, and Y_test with your actual data
+
+# K-means clustering
+kmeans_result <- kmeans(df, centers = 2, nstart = 25)
+
+# Predict cluster labels for test data based on the centroids from kmeans training
+predictions_kmeans <- as.factor(kmeans(X_test, centers = kmeans_result$centers)$cluster)
+
+# Split the data into training and testing sets for KNN
+set.seed(2312181)  # Set seed for reproducibility
+trainIndex <- createDataPartition(Y_train, p = 0.8, list = FALSE)
+X_train_knn <- X_train[trainIndex, ]
+Y_train_knn <- Y_train[trainIndex]
+X_test_knn <- X_train[-trainIndex, ]
+Y_test_knn <- Y_train[-trainIndex]
+
+# Train KNN model
+control <- trainControl(method = "cv", number = 5)
+metric <- "Accuracy"
+model_knn <- train(Y_train_knn ~ ., data = data.frame(X_train_knn, Y_train_knn), 
+                   method = "knn", trControl = control, metric = metric, tuneLength = 5)
+
+# Predict using KNN
+predictions_knn <- predict(model_knn, newdata = X_test_knn)
+
+# Calculate accuracy for K-means clustering
+accuracy_kmeans <- sum(predictions_kmeans == Y_test) / length(Y_test)
+
+# Convert predictions_knn to factor with the same levels as Y_test
+predictions_knn <- factor(predictions_knn, levels = levels(Y_test_knn))
+
+# Calculate accuracy for KNN
+accuracy_knn <- confusionMatrix(predictions_knn, Y_test_knn)$overall['Accuracy']
+
+# Check if accuracy_kmeans and accuracy_knn are not missing
+if (!is.na(accuracy_kmeans) && !is.na(accuracy_knn)) {
+  # Compare performance
+  if (accuracy_kmeans > accuracy_knn) {
+    best_model <- "K-means Clustering"
+    best_performance <- accuracy_kmeans
+  } else {
+    best_model <- "KNN"
+    best_performance <- accuracy_knn
+  }
+} else {
+  # Handle the case when accuracy values are missing
+  best_model <- "Undefined"
+  best_performance <- NA
+}
+
+# Print the best model and its performance
+print(paste("Best model:", best_model))
+print(paste("Best performance:", best_performance))
+
+
+```
+
